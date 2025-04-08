@@ -1,6 +1,7 @@
 import { View, Text, TouchableOpacity, Image, ActivityIndicator } from "react-native";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
+import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export default function WelcomeScreen() {
@@ -12,7 +13,7 @@ export default function WelcomeScreen() {
       try {
         const user = await AsyncStorage.getItem("user");
         if (user) {
-          router.replace("/home"); // ✅ Redirect to home if user exists
+          router.replace("/chats"); // ✅ Redirect to home if user exists
         }
       } catch (error) {
         console.error("Error reading AsyncStorage:", error);
@@ -30,7 +31,14 @@ export default function WelcomeScreen() {
     <View className="flex-1 bg-white items-center justify-center px-6">
       
       {/* WhatsApp Logo */}
-      <Image source={require("../assets/images/whatsapp-logo.png")} className="w-28 h-28 mb-10" />
+      <View style={{ width: 100, height: 100, marginBottom: 40 }}>
+  <Image
+    source={require("../assets/images/WhatsApp_Logo_green.svg.png")}
+    style={{ width: "100%", height: "100%", objectFit: "contain" }}
+    resizeMode="contain"
+  />
+</View>
+
 
       {/* Welcome Text */}
       <Text className="text-3xl font-bold text-gray-900 mb-4 text-center">Welcome to WhatsApp</Text>

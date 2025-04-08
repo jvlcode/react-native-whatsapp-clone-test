@@ -5,6 +5,7 @@ import * as ImagePicker from "expo-image-picker";
 import Constants from "expo-constants";
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { MaterialIcons } from "@expo/vector-icons";
 
 const API_BASE_URL = Constants.expoConfig?.extra?.API_BASE_URL || "http://192.168.180.155:5000/api";
 
@@ -103,7 +104,7 @@ useEffect(() => {
 
       if (response.data) {
         await AsyncStorage.setItem("user", JSON.stringify(response.data));
-        router.replace("/home");
+        router.replace("/chats");
       } else {
         Alert.alert("Error", "Something went wrong while saving your profile.");
       }
@@ -150,3 +151,4 @@ useEffect(() => {
     </View>
   );
 }
+
