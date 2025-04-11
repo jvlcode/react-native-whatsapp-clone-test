@@ -13,6 +13,7 @@ export const connectSocket = (userId: string, onConnect?: () => void) => {
   }
 
   socket = io(SERVER_URL, {
+    auth: {userId},
     transports: ["websocket"], // important for React Native
     forceNew: true, // ensures fresh connection
     reconnection: true, // auto reconnect

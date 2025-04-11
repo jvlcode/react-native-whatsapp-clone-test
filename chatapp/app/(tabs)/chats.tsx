@@ -146,30 +146,20 @@ export default function ChatsScreen() {
     applyFilters();
   }, [activeCategory, chats, user]);
 
-  const notifyConversationFocus = async (conversationId: string, focused: boolean) => {
-    if (!user?._id) return;
-
-    try {
-      await fetch(`${API_BASE_URL}/conversations/focus`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          userId: user._id,
-          conversationId,
-          focused,
-        }),
-      });
+  const focusConversation = async (conversationId: string, focused: boolean) => {
+    const socket = getSocket();
+    if (!user?._id || !socket) return;
+  
+    if (focused) {
+      socket.emit("focus-conversation", conversationId);
       const prevChats = useChatStore.getState().chats || [];
       const updateChats = prevChats.map((chat) =>
           chat._id === conversationId ? { ...chat, unread: 0 } : chat
         )
       
       useChatStore.getState().setChats(updateChats)
-    
-    } catch (err) {
-      console.error("❌ Failed to notify conversation focus:", err);
+    } else {
+      socket.emit("unfocus-conversation", conversationId);
     }
   };
 
@@ -252,7 +242,7 @@ export default function ChatsScreen() {
         renderItem={({ item }) => (
           <TouchableOpacity
             onPress={() => {
-              notifyConversationFocus(item._id, true);
+              focusConversation(item._id, true);
             }}
             className="flex-row items-center px-4 py-3"
           >

@@ -22,26 +22,5 @@ router.get("/:userId", async (req, res) => {
 });
 
 
-router.post("/focus", async (req, res) => {
-  const { userId, conversationId, focused } = req.body;
-
-  try {
-    const conversation = await Conversation.findById(conversationId);
-    if (!conversation) {
-      return res.status(404).json({ error: "Conversation not found" });
-    }
-
-    conversation.unreadCounts.set(userId, 0);
-
-    await conversation.save();
-
-    res.json({ success: true });
-  } catch (err) {
-    console.error("❌ Error updating focus state:", err);
-    res.status(500).json({ error: "Server error" });
-  }
-});
-
-
 
 export default router;

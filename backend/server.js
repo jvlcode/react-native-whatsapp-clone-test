@@ -5,6 +5,8 @@ import cors from "cors";
 import path from "path";
 import http from "http"; // ✅ required for socket.io
 import { Server } from "socket.io"; // ✅ socket.io
+import registerSocketHandlers from "./socket.js"; // ✅ NEW
+
 
 // Routes
 import userRoutes from "./routes/userRoutes.js";
@@ -37,23 +39,12 @@ const io = new Server(server, {
   },
 });
 
+// Pass Socket.IO to handler file
+registerSocketHandlers(io);
 // ✅ Export io so routes can use it
 export { io };
 
-// ✅ Setup socket connection
-io.on("connection", (socket) => {
-  console.log("⚡ User connected:", socket.id);
 
-  // Join user's room
-  socket.on("join", (userId) => {
-    socket.join(userId);
-    console.log(`👥 User ${userId} joined their personal room`);
-  });
-
-  socket.on("disconnect", () => {
-    console.log("❌ User disconnected:", socket.id);
-  });
-});
 
 
 // 📦 Connect MongoDB and start server
