@@ -1,16 +1,38 @@
 import { Tabs } from "expo-router";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { View, Text } from "react-native";
+import { View, Text, LogBox } from "react-native";
+import { useEffect } from "react";
+import { useChatStore } from "@/stores/chatStore";
 
 export default function TabLayout() {
-  const unreadChats = 4; // badge count for chats
+  const unreadCount = useChatStore((state) =>
+    Array.isArray(state.chats)
+      ? state.chats.reduce((sum, chat) => sum + (chat.unread || 0), 0)
+      : 0
+  );
   const hasNewUpdates = true; // show dot if true
-
+ useEffect(() => {
+    LogBox.ignoreLogs([
+      'props.pointerEvents is deprecated. Use style.pointerEvents',
+    ]);
+  }, []);
+  useEffect(() => {
+    const originalWarn = console.warn;
+    console.warn = (...args) => {
+      if (
+        typeof args[0] === "string" &&
+        args[0].includes("props.pointerEvents is deprecated. Use style.pointerEvents")
+      ) {
+        return;
+      }
+      originalWarn(...args);
+    };
+  }, []);
   return (
     <Tabs
       screenOptions={({ route }) => ({
         headerShown: false,
-        tabBarShowLabel: true,
+        tabBarShowLabel: false,
         tabBarLabelStyle: {
           fontSize: 12,
         },
@@ -44,31 +66,30 @@ export default function TabLayout() {
           const iconColor = focused ? "#075E54" : color;
 
           return (
-            <View className="relative items-center justify-center w-[48px] h-[48px]">
-            <View
-              className={`px-5 py-1.5 rounded-full ${
-                focused ? "bg-green-200" : "bg-transparent"
-              }`}
-            >
-              <IconComponent name={iconName} size={18} color={iconColor} />
-            </View>
-          
-            {/* 🔢 Show badge number on chats */}
-            {route.name === "chats" && unreadChats > 0 && (
-              <View className="absolute top-2 -right-0.5 bg-green-600 rounded-full px-1.5 py-0.5 min-w-[16px] items-center justify-center">
-                <Text className="text-white text-[8px] font-bold">
-                  {unreadChats > 99 ? "99+" : unreadChats}
-                </Text>
+            <View className={`relative items-center justify-center `}>
+              <View className={`px-5 py-1.5 rounded-full ${ focused ? "bg-green-200" : "bg-transparent"}`}>
+                <IconComponent name={iconName} size={22} color={iconColor} />
               </View>
-            )}
+                <Text className={`text-xs font-semibold mt-1 ${focused ? "text-[#075E54]" : "text-gray-500"}`}>
+                  {route.name.charAt(0).toUpperCase() + route.name.slice(1)}
+                </Text>
           
-            {/* 🔘 Show small dot for updates */}
-            {route.name === "updates" && hasNewUpdates && (
-              <View className="absolute top-2 -right-0.5 bg-green-500 w-2 h-2 rounded-full" />
-            )}
-          </View>
+              {/* 🔢 Show badge number on chats */}
+              {route.name === "chats" && unreadCount > 0 && (
+                <View className="absolute top-0 -right-0 bg-green-600 rounded-full px-1.5 py-0.5 min-w-[16px] items-center justify-center">
+                  <Text className="text-white text-[8px] font-bold">
+                    {unreadCount > 99 ? "99+" : unreadCount}
+                  </Text>
+                </View>
+              )}
           
+              {/* 🔘 Show small dot for updates */}
+              {route.name === "updates" && hasNewUpdates && (
+                <View className="absolute top-0 right-0 bg-green-500 w-2 h-2 rounded-full" />
+              )}
+            </View>
           );
+          
         },
       })}
     >

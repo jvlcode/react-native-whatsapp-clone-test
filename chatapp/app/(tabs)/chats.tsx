@@ -18,38 +18,43 @@ import Constants from "expo-constants";
 import { getUser } from "@/utils/storage"
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
-
+import { useChatStore } from "@/stores/chatStore";
 
 const categories = ["All", "Unread", "Favorites", "Groups"];
-
-
 const API_BASE_URL = Constants.expoConfig?.extra?.API_BASE_URL;
 
 export default function ChatsScreen() {
   const [activeCategory, setActiveCategory] = useState("All");
   const [isSearchActive, setIsSearchActive] = useState(false);
-  const [chats, setChats] = useState([]);
+  const chats = useChatStore((state) => state.chats);
   const [user, setUser] = useState([]);
   const [filteredChats, setFilteredChats] = useState([]);
-
-
+  
 
   useEffect(() => {
     if (!user?._id) return;
-  
+
     const fetchChats = async () => {
       try {
         const res = await fetch(`${API_BASE_URL}/conversations/${user._id}`);
         const data = await res.json();
-        setChats(data.map((conv) => formatChat(conv)));
+        const formattedChats = data.map((conv) => formatChat(conv));
+
+        formattedChats.sort((a, b) => {
+          const timeA = new Date(a.lastMessage?.createdAt || a.updatedAt).getTime();
+          const timeB = new Date(b.lastMessage?.createdAt || b.updatedAt).getTime();
+          return timeB - timeA;
+        });
+
+        // setChats(formattedChats);
+        useChatStore.getState().setChats(formattedChats);
       } catch (err) {
         console.error("Error fetching chats:", err);
       }
     };
-  
+
     fetchChats();
   }, [user]);
-  
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -58,91 +63,92 @@ export default function ChatsScreen() {
         setUser(storedUser);
       }
     };
-  
+
     fetchUser();
   }, []);
 
-    function formatChat(conversation, lastMessage=null) {
-      const otherParticipant = conversation.participants?.find((p) => p._id !== (user._id));
-      // const isOpen = conversation.openBy?.includes?.(user._id); // ✅
-      return {
-        ...conversation,
-        name: otherParticipant?.phone || "Unknown",
-        message: lastMessage ? lastMessage?.text : conversation?.lastMessage?.text,
-        createdAt: new Date(conversation?.lastMessage?.createdAt || conversation.updatedAt).toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
-        unread: conversation?.unreadCounts?.[user._id] || 0,
-        avatar: otherParticipant?.profileImage ||
-          "https://upload.wikimedia.org/wikipedia/commons/9/99/Sample_User_Icon.png",
-      };
-    }
-  
-  useEffect(() => {
+  function formatChat(conversation) {
+    const otherParticipant = conversation.participants?.find(
+      (p) => p._id !== user._id
+    );
+
+    const lastMessage = conversation?.lastMessage;
+
+    return {
+      ...conversation,
+      name: otherParticipant?.phone || "Unknown",
+      message: lastMessage?.text || "No messages yet",
+      createdAt: new Date(
+        lastMessage?.createdAt || conversation.updatedAt
+      ).toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+      unread: conversation?.unreadCounts?.[user._id] || 0,
+      avatar:
+        otherParticipant?.profileImage ||
+        "https://upload.wikimedia.org/wikipedia/commons/9/99/Sample_User_Icon.png",
+    };
+  }
+
+  useEffect( () => {
     if (!user?._id) return;
     if (getSocket()?.connected) return;
 
     connectSocket(user._id, () => {
       const socket = getSocket();
       if (!socket) return;
-  
-      socket.on("new-conversation", (conversation) => {
-        const formattedChat = formatChat(conversation);
-        setChats((prev) => [formattedChat, ...prev]);
-      });
-  
-      socket.on("message", (message) => {
-        setChats((prevChats) =>
-          prevChats.map((chat) => {
-            if (chat._id !== message.conversationId) return chat;
-            const newUnread = (chat.unread || 0) + 1;
-      
-            return {
-              ...chat,
-              message: message.text,
-              createdAt: new Date(message.createdAt).toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-              }),
-              unread: newUnread,
-            };
-          })
-        );
+
+      socket.on("message", ({ message, conversation, isNew }) => {
+        const prevChats = useChatStore.getState().chats || [];
+        const exists = prevChats.some((c) => c._id === conversation._id);
+
+        const updatedChats = exists
+          ? prevChats.map((chat) =>
+              chat._id === conversation._id
+                ? formatChat({ ...conversation })
+                : chat
+            )
+          : [formatChat(conversation), ...prevChats];
+
+        const sortedChats = updatedChats.sort((a, b) => {
+          const timeA = new Date(a.lastMessage?.createdAt || a.updatedAt).getTime();
+          const timeB = new Date(b.lastMessage?.createdAt || b.updatedAt).getTime();
+          return timeB - timeA;
+        });
+
+        useChatStore.getState().setChats(sortedChats);
       });
       
-    });
-  
     return () => {
       getSocket()?.disconnect();
     };
+  });
   }, [user]);
 
   useEffect(() => {
     const applyFilters = () => {
       if (!user?._id) return;
-  
-      let filtered = [...chats];
-  
+
+      let filtered = Array.isArray(chats) ? [...chats] : [];
+
       if (activeCategory === "Unread") {
         filtered = filtered.filter((chat) => chat.unread > 0);
       } else if (activeCategory === "Favorites") {
-        filtered = filtered.filter((chat) => chat.isFavorite); // Optional flag
+        filtered = filtered.filter((chat) => chat.isFavorite);
       } else if (activeCategory === "Groups") {
-        filtered = filtered.filter((chat) => chat.isGroup); // Assuming you tag group chats
+        filtered = filtered.filter((chat) => chat.isGroup);
       }
-  
+
       setFilteredChats(filtered);
     };
-  
+
     applyFilters();
   }, [activeCategory, chats, user]);
-  
-  
+
   const notifyConversationFocus = async (conversationId: string, focused: boolean) => {
-    console.log(conversationId)
     if (!user?._id) return;
-  
+
     try {
       await fetch(`${API_BASE_URL}/conversations/focus`, {
         method: "POST",
@@ -155,46 +161,26 @@ export default function ChatsScreen() {
           focused,
         }),
       });
-
-      setChats((prev) =>
-        prev.map((chat) =>
+      const prevChats = useChatStore.getState().chats || [];
+      const updateChats = prevChats.map((chat) =>
           chat._id === conversationId ? { ...chat, unread: 0 } : chat
         )
-      );
+      
+      useChatStore.getState().setChats(updateChats)
+    
     } catch (err) {
       console.error("❌ Failed to notify conversation focus:", err);
     }
   };
-  
-
-  // Load cache
-useEffect(() => {
-  const loadCachedChats = async () => {
-    const cached = await AsyncStorage.getItem("chats");
-    if (cached) setChats(JSON.parse(cached));
-  };
-  loadCachedChats();
-}, []);
-
-// Save to cache whenever chats update
-useEffect(() => {
-  if (chats.length > 0) {
-    AsyncStorage.setItem("chats", JSON.stringify(chats));
-  }
-}, [chats]);
 
   return (
     <View className="flex-1 bg-white pt-10 relative">
       {isSearchActive ? (
-        // 🔍 Search Focused Mode
         <SearchBar
           onCancel={() => setIsSearchActive(false)}
-          onSearch={(text) => console.log("Searching for:", text)}
+          onSearch={(text) => {}}
         />
-
-
       ) : (<>
-        {/* 🔝 Top Bar */}
         <View className="px-4 flex-row justify-between items-center mb-4">
           <Text className="text-2xl font-bold text-green-700">WhatsApp</Text>
           <View className="flex-row space-x-5">
@@ -207,7 +193,6 @@ useEffect(() => {
           </View>
         </View>
 
-        {/* 🔍 Search Bar */}
         <View className="mx-4 mb-3 flex-row items-center bg-gray-100 rounded-full px-4 py-2">
           <Ionicons name="search" size={20} color="gray" />
           <TextInput
@@ -219,8 +204,6 @@ useEffect(() => {
         </View>
       </>)}
 
-
-      {/* 🧭 Category Tabs – New WhatsApp-Style Pills */}
       <View className="flex-row px-4 mb-3 space-x-2">
         {categories.map((item) => {
           const isActive = activeCategory === item;
@@ -242,9 +225,7 @@ useEffect(() => {
         })}
       </View>
 
-
-      {/* 💬 Chat List */}
-      { filteredChats.length > 0 ? <FlatList
+      {filteredChats.length > 0 ? <FlatList
         data={filteredChats}
         keyExtractor={(item) => item._id}
         initialNumToRender={10}
@@ -269,12 +250,12 @@ useEffect(() => {
           </View>
         )}
         renderItem={({ item }) => (
-          <TouchableOpacity  
+          <TouchableOpacity
             onPress={() => {
-              notifyConversationFocus(item._id, true); // Emit open
-              // router.push(`/chat/${item.id}`); // Navigate
+              notifyConversationFocus(item._id, true);
             }}
-             className="flex-row items-center px-4 py-3">
+            className="flex-row items-center px-4 py-3"
+          >
             <Image
               source={{ uri: item.avatar }}
               className="w-12 h-12 rounded-full"
@@ -303,25 +284,20 @@ useEffect(() => {
               </View>
             </View>
           </TouchableOpacity>
-        )} 
-      /> : <EmptyChats/>}
-
+        )}
+      /> : <EmptyChats />}
     </View>
   );
 }
-
 
 function SearchBar({ onSearch, onCancel }) {
   const [query, setQuery] = useState("");
 
   return (
     <View className="flex-row items-center bg-gray-200 rounded-full px-4 py-2 mx-4 my-3">
-      {/* 🔙 Back */}
       <TouchableOpacity onPress={onCancel}>
         <Ionicons name="arrow-back" size={24} color="gray" />
       </TouchableOpacity>
-
-      {/* 📝 Input */}
       <TextInput
         autoFocus
         value={query}
@@ -331,8 +307,6 @@ function SearchBar({ onSearch, onCancel }) {
         placeholderTextColor="gray"
         className="ml-3 flex-1 text-base text-black outline-none"
       />
-
-      {/* 🚀 Paper Rocket */}
       <TouchableOpacity className="focus:outline-none" onPress={() => onSearch(query)}>
         <Feather name="send" size={20} color="#075E54" />
       </TouchableOpacity>
@@ -340,25 +314,16 @@ function SearchBar({ onSearch, onCancel }) {
   );
 }
 
-
-
 function EmptyChats() {
   const router = useRouter();
 
   return (
     <View className="flex-1 items-center justify-center bg-white p-6">
-      {/* Icon or Illustration */}
       <MaterialIcons name="chat-bubble-outline" size={100} color="#ccc" />
-
-      {/* Title */}
       <Text className="text-xl font-semibold mt-6">Start chatting on WhatsApp</Text>
-
-      {/* Subtitle */}
       <Text className="text-center text-gray-500 mt-2">
         Tap the message icon below to start a new conversation
       </Text>
-
-      {/* FAB */}
       <TouchableOpacity className="absolute bottom-6 right-6 bg-green-500 p-4 rounded-full shadow-lg">
         <MaterialIcons name="message" size={28} color="white" />
       </TouchableOpacity>
