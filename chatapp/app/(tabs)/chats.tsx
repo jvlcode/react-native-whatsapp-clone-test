@@ -15,9 +15,8 @@ import {
 import { useEffect, useState } from "react";
 import { connectSocket, getSocket } from "@/utils/socket";
 import Constants from "expo-constants";
-import { getUser } from "@/utils/storage"
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useRouter } from "expo-router";
+import { router, useRouter } from "expo-router";
+import { useUserStore } from "@/stores/userStore";
 import { useChatStore } from "@/stores/chatStore";
 
 const categories = ["All", "Unread", "Favorites", "Groups"];
@@ -27,10 +26,9 @@ export default function ChatsScreen() {
   const [activeCategory, setActiveCategory] = useState("All");
   const [isSearchActive, setIsSearchActive] = useState(false);
   const chats = useChatStore((state) => state.chats);
-  const [user, setUser] = useState([]);
   const [filteredChats, setFilteredChats] = useState([]);
-  
-
+  const [query, setQuery] = useState("");
+  const user = useUserStore((s) => s.user);
   useEffect(() => {
     if (!user?._id) return;
 
@@ -56,16 +54,7 @@ export default function ChatsScreen() {
     fetchChats();
   }, [user]);
 
-  useEffect(() => {
-    const fetchUser = async () => {
-      const storedUser = await getUser();
-      if (storedUser) {
-        setUser(storedUser);
-      }
-    };
-
-    fetchUser();
-  }, []);
+ 
 
   function formatChat(conversation) {
     const otherParticipant = conversation.participants?.find(
@@ -140,26 +129,33 @@ export default function ChatsScreen() {
         filtered = filtered.filter((chat) => chat.isGroup);
       }
 
+       // Implement search functionality here
+       if (query.trim()) {
+        filtered = filtered.filter(
+          (chat) => chat?.name?.includes(query)
+        );
+      }
+
       setFilteredChats(filtered);
     };
 
     applyFilters();
-  }, [activeCategory, chats, user]);
+  }, [activeCategory, chats, user, query]);
 
-  const focusConversation = async (conversationId: string, focused: boolean) => {
+  const focusConversation = async (conversation: any, focused: boolean) => {
     const socket = getSocket();
     if (!user?._id || !socket) return;
   
     if (focused) {
-      socket.emit("focus-conversation", conversationId);
+      socket.emit("focus-conversation", conversation._id);
       const prevChats = useChatStore.getState().chats || [];
       const updateChats = prevChats.map((chat) =>
-          chat._id === conversationId ? { ...chat, unread: 0 } : chat
-        )
-      
-      useChatStore.getState().setChats(updateChats)
+          chat._id === conversation._id ? { ...chat, unread: 0 } : chat
+      )
+      useChatStore.getState().setChats(updateChats);
+      useChatStore.getState().setConv(conversation)
     } else {
-      socket.emit("unfocus-conversation", conversationId);
+      socket.emit("unfocus-conversation", conversation._id);
     }
   };
 
@@ -168,7 +164,7 @@ export default function ChatsScreen() {
       {isSearchActive ? (
         <SearchBar
           onCancel={() => setIsSearchActive(false)}
-          onSearch={(text) => {}}
+          onSearch={(text) => setQuery(text)} 
         />
       ) : (<>
         <View className="px-4 flex-row justify-between items-center mb-4">
@@ -242,7 +238,8 @@ export default function ChatsScreen() {
         renderItem={({ item }) => (
           <TouchableOpacity
             onPress={() => {
-              focusConversation(item._id, true);
+              focusConversation(item, true);
+              router.push(`/chats/${item._id}`)
             }}
             className="flex-row items-center px-4 py-3"
           >
@@ -275,13 +272,12 @@ export default function ChatsScreen() {
             </View>
           </TouchableOpacity>
         )}
-      /> : <EmptyChats />}
+      /> : ( query && <Text className="text-center mt-5 text-gray-500">No Results</Text>) || <EmptyChats />}
     </View>
   );
 }
 
 function SearchBar({ onSearch, onCancel }) {
-  const [query, setQuery] = useState("");
 
   return (
     <View className="flex-row items-center bg-gray-200 rounded-full px-4 py-2 mx-4 my-3">
@@ -290,16 +286,12 @@ function SearchBar({ onSearch, onCancel }) {
       </TouchableOpacity>
       <TextInput
         autoFocus
-        value={query}
-        onChangeText={setQuery}
+        onChangeText={(text) => onSearch(text)}
         placeholder="Search..."
         selectionColor="#075E54"
         placeholderTextColor="gray"
         className="ml-3 flex-1 text-base text-black outline-none"
       />
-      <TouchableOpacity className="focus:outline-none" onPress={() => onSearch(query)}>
-        <Feather name="send" size={20} color="#075E54" />
-      </TouchableOpacity>
     </View>
   );
 }

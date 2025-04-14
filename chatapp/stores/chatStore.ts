@@ -9,14 +9,18 @@ interface Chat {
 interface ChatState {
   chats: Chat[];
   setChats: (chats: Chat[] | ((prev: Chat[]) => Chat[])) => void;
+  conv: Object | null;
+  setConv:(conv:Object) => void;
   updateChat: (chat: Chat) => void;
   getUnreadCount: () => number;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
   chats: [],
+  conv: null,
+  setConv: (conv:any) => set({ conv }),
 
-  setChats: (chats) => set({ chats }),
+  setChats: (chats:Chat[]) => set({ chats }),
 
   updateChat: (updatedChat) => {
     const chats = get().chats;
